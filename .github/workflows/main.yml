@@ -1,0 +1,88 @@
+
+name: Keep Repositories Alive
+
+on:
+  schedule:
+    # 每月 1 日 UTC 05:23 执行，避开整点高峰
+    - cron: "23 5 1 * *"
+
+  # 支持在 Actions 页面手动执行
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    name: Keep alive ${{ matrix.repository }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        repository:
+          - 13370463558/katabump-renew
+          - 13370463558/Auto-Renew-HidenCloud
+          - 13370463558/openworldvps-renew
+          - 13370463558/keep-repo-alive
+          - 13370463558/Lunes
+          - 13370463558/Auto-checkin-iamhc
+
+    steps:
+      - name: Update keepalive log
+        env:
+          GH_TOKEN: ${{ secrets.KEEPALIVE_TOKEN }}
+          REPOSITORY: ${{ matrix.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE_PATH=".keepalive/heartbeat.log"
+
+          # 自动获取目标仓库默认分支
+          DEFAULT_BRANCH="$(
+            gh api "/repos/${REPOSITORY}" \
+              --jq '.default_branch'
+          )"
+
+          # 生成新的日志内容
+          CONTENT="$(
+            printf '%s\n' \
+              "Last keepalive: $(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+              "Triggered by: ${GITHUB_REPOSITORY}" \
+              "Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          )"
+
+          ENCODED_CONTENT="$(
+            printf '%s' "${CONTENT}" | base64 -w 0
+          )"
+
+          # 如果文件已经存在，更新时必须提供当前文件 SHA
+          FILE_SHA="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPOSITORY}/contents/${FILE_PATH}?ref=${DEFAULT_BRANCH}" \
+              --jq '.sha' 2>/dev/null || true
+          )"
+
+          if [ -n "${FILE_SHA}" ]; then
+            echo "Updating ${REPOSITORY}/${FILE_PATH}"
+
+            gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPOSITORY}/contents/${FILE_PATH}" \
+              -f message="chore: update keepalive log" \
+              -f content="${ENCODED_CONTENT}" \
+              -f branch="${DEFAULT_BRANCH}" \
+              -f sha="${FILE_SHA}"
+          else
+            echo "Creating ${REPOSITORY}/${FILE_PATH}"
+
+            gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPOSITORY}/contents/${FILE_PATH}" \
+              -f message="chore: create keepalive log" \
+              -f content="${ENCODED_CONTENT}" \
+              -f branch="${DEFAULT_BRANCH}"
+          fi
+
+          echo "Successfully updated ${REPOSITORY}"
