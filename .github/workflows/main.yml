@@ -24,6 +24,9 @@ jobs:
           - 13370463558/keep-repo-alive
           - 13370463558/Lunes
           - 13370463558/Auto-checkin-iamhc
+          - 13370463558/zampto
+          - 13370463558/ACLClouds-server
+          - 13370463558/Auto-Renew-Bothosting
 
     steps:
       - name: Update keepalive log
